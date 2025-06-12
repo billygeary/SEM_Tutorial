@@ -1,0 +1,165 @@
+---
+title: "Structural Equation Modelling"
+author: "Billy Geary"
+format: 
+  revealjs:
+    theme: dark
+editor: visual
+---
+
+```{r setup}
+library(piecewiseSEM)
+library(ggplot2)
+library(ggdag)
+```
+
+## Ecosystems are complex
+
+-   Ecosystems are complex, with multiple interacting components
+-   If we want to understand them well (and hopefully attribute causation), we need methods that are able to test these relationships when randomised experiments aren't possible.
+
+## What is a Structural Equation Model?
+
+-   Statistical technique that allows us to test complex relationships between multiple variables at once
+-   Networks of variables where some are both predictors *and* response variables
+-   Tests whether a proposed model structure represents patterns in the data well (ideally giving causal inference)
+
+## What sort of questions can SEMs answer?
+
+-   *"I think fire affects bandicoots, but i'm not sure whether it's just about how foxes and cats respond to fire, or fire in its own right"*
+-   We can write this out as a Directed Acyclic Graph (fancy conceptual model)
+
+## What sort of questions can SEMs answer?
+
+```{r}
+example_dag = dagify(
+  bandicoot ~ fox + cat + fire,
+  fox ~ fire,
+  cat ~ fox + fire
+) 
+
+example_dag %>% ggdag() + theme_void()
+```
+
+## Key Concepts
+
+-   *Causal Thinking* - SEMs require us to specify a model structure based on ecological theory. Means thinking about mechanisms
+-   *Direct vs. Indirect Effects* - How one variable influences another can occur through multiple pathways
+-   *Latent vs. Observed Variable* - Latent variables are unmeasured and represented through multiple indicators. Observed variables are what we directly measure
+-   Focus on how ecosystems work *mechanistically* rather than which variables are correlated with each other
+
+## SEMs vs Other Methods
+
+-   *Regression*: One response variable at a time
+-  *Path Analysis*: SEMs are an extension that allow for latent variables & complex error structures
+-   *Bayesian Networks*: Probabilistic dependencies and uncertainties in causal directions. SEMs assume fixed causal structures
+
+## Model Structure
+
+-   Measurement Model (Latent Variables): How are unobserved variables measured through indicators/proxies
+-   Structural Model (Causal Paths): The causal pathways between latent and observed variables
+
+## SEM Workflow
+
+1.  Develop your conceptual model
+2.  Translate into a path diagram
+3.  Specify the statistical model (often a series of linear equations)
+4.  Fit the model (e.g., `lavaan`, `piecewiseSEM`, or `brms`)
+5.  Evaluate model fit
+6.  Interpret path coefficients
+7.  Scenario Analysis
+
+## An example - What drives post-fire plant diversity?
+
+-   Grace, J.B. and Keeley, J.E. (2006), A Structural Equation Model Analysis Of Postfire Plant Diversity In California Shrublands. Ecological Applications, 16: 503-514.
+-   Borrowed from Jarret Byrnes: https://rpubs.com/jebyrnes/brms_bayes_sem
+
+## The conceptual model
+
+-   Grace and Keeley wanted to know what influences plant species richness
+
+![](keeley_causal_model.png){fig-align="center"}
+
+## The conceptual model
+
+-   We'll focus on how plant species richness (`rich`) is affected by fire severity (`firesev`) and plant abundance (`cover`)
+
+```{r}
+keeley_dag = dagify(
+  rich ~ firesev + cover,
+  cover ~ firesev
+) 
+
+keeley_dag %>% ggdag() + theme_void()
+
+```
+
+## Converting to an SEM
+
+```{r}
+#| echo: true
+data("keeley")
+
+k_fit_psem <- psem(
+  lm(rich ~ firesev + cover, data=keeley),
+  lm(cover ~ firesev, data=keeley),
+  data = keeley
+)
+```
+
+## Model Coefficients
+
+-   Visualise the SEM coefficients using `coefs(k_fit_psem)`
+
+```{r}
+coefs(k_fit_psem)
+```
+
+## Visualise the SEM
+
+-   Plot the SEM using `plot(k_fit_psem)`
+
+![](keeley_sem_out.png){fig-align="center"}
+
+## An example - Fire, rainfall and predation in south-west WA
+
+Geary, W.L. et al. 2023. Identifying historical and future global change drivers that place species recovery at risk. *Global Change Biology*. 
+
+![](upperwarren_diagram.jpg){fig-align="center"}
+
+## An example - Fire, rainfall and predation in south-west WA
+
+![](upperwarren_sem_result.jpg){fig-align="center"}
+
+## An example - Fire, rainfall and predation in south-west WA
+
+- *Scenario analysis* or *query based approaches* to test how modifying one variable in the model flows through to affect something else, considering both *indirect* and *direct* effects. 
+- Allows for uncertainty propagation
+
+## An example - Fire, rainfall and predation in south-west WA
+
+![](upperwarren_scenario_analysis.jpg){fig-align="center"}
+
+## Traps and Tips
+
+-   Causal assumptions: correlation ≠ causation  
+-   Start simple and build up
+-   Sample size (ideally >10 observations per parameter)
+-   Watch out for nonlinearity & non-normality (`piecewiseSEM` and `brms`)
+-   Look out for when you need to standardize coefficients
+-   Use a range of model fit indices (Chi-square, CFI, RMSEA, SRMR)
+-   Acknowledge alternative model structures (AIC, WAIC, R squared)
+
+## R Packages
+
+-   `lavaan` - The OG SEM R package. Has a Bayesian cousin called `blavaan`
+-   `piecewiseSEM` - The most commonly used SEM package in ecology, very flexible model formats and good help material
+-   `daggity` - For creating reproducible Directed Acyclic Graphs (conceptual models) in R
+-   `brms` - My personal favourite for doing SEMs (super flexible model forms, distributions, uncertainty representation)
+
+## Good References
+
+-   Shipley, B., 2016. Cause and correlation in biology: A user's guide to path analysis, structural equations and causal inference with R. Cambridge university press.
+-   Grace, J.B., 2006. Structural equation modeling and natural systems. Cambridge University Press.
+-   Grace, J.B., Anderson, T.M., Olff, H. and Scheiner, S.M., 2010. On the specification of structural equation models for ecological systems. Ecological monographs, 80(1), pp.67-87.
+-   Greenville, A.C., Wardle, G.M., Tamayo, B. and Dickman, C.R., 2014. Bottom-up and top-down processes interact to modify intraguild interactions in resource-pulse environments. Oecologia, 175(4), pp.1349-1358.

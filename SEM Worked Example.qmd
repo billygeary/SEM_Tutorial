@@ -1,0 +1,151 @@
+---
+title: "Example SEM"
+format: html
+editor: visual
+---
+## Structural Equation Modelling
+
+We'll use this package:
+Lefcheck, J.S. (2016), piecewiseSEM: Piecewise structural equation modelling in r for ecology, evolution, and systematics. Methods Ecol Evol, 7: 573-579. https://doi.org/10.1111/2041-210X.12512
+
+```{r setup}
+library(piecewiseSEM) 
+library(lme4)
+data(keeley)
+```
+
+## The Keeley Data
+
+To start with, we'll have a play around with the Keeley data that comes with piecewiseSEM. The data come from this paper: https://doi.org/10.1890/1051-0761(2006)016[0503:ASEMAO]2.0.CO;2
+
+This example borrows heavily from Jarret Byrne's SEM examples here:
+https://rpubs.com/jebyrnes/brms_bayes_sem
+
+Predictor variables
+
+- distance - distance from coast
+- elev - site elevation
+- abiotic - optimal abiotic conditions
+- age - stand age at a site prior to fire
+- hetero - heterogeneity in species composition (dissimilarity measure)
+- firesev - severity of fire at the site
+- cover - plant abundance at a site (plant cover)
+- rich - plant species richness at the site
+
+```{r}
+# Check it out
+head(keeley)
+```
+
+
+## Fit an example SEM
+Our example structural equation model here has two components:
+
+- Richness is a function of severity, age and cover
+- Cover is a function of severity
+- Severity is a function of age
+
+This creates a mediation pathway where fire severity can affect richness both directly and indirectly through its effect on cover.
+
+We can specify each model as an independent linear model using the piecewise SEM package
+
+```{r}
+psem_fit <- psem(
+  lm(rich ~ firesev + cover + age, data=keeley),
+  lm(cover ~ firesev, data=keeley),
+  lm(firesev ~ age, data=keeley),
+  data = keeley
+)
+```
+
+## What does it look like?
+
+There's a few things we want to look at in the model output. 
+
+- Test of directed separation
+- Global goodness of fit
+- Model coefficients
+- Individual r-squareds
+
+```{r}
+summary(psem_fit, standardize = "scale")
+```
+
+### Test of directed separation
+The directed separation test examines whether any variables in a model are statistically independent when conditioning on their shared predictors - essentially testing if you've missed any important direct relationships that haven't been explicitly specified in the model. 
+
+If a relationship is identified, it might be an argument for including that relationship in an updated version of the model. 
+
+```{r}
+summary(psem_fit, standardize = "scale")$dTable
+```
+
+### Global goodness of fit
+The global goodness-of-fit tests evaluate whether a specified model structure adequately represents the relationships in the data - essentially asking "does this model fit the data well enough?"
+
+Chi-squared test: Tests the null hypothesis that your model perfectly fits the data. A non-significant p-value  is what you want - it means you fail to reject the hypothesis of perfect fit, suggesting your model is adequate.
+
+Fisher's C: An alternative fit statistic that combines information from all the independence claims. Like the chi-squared test, a non-significant p-value indicates acceptable model fit.
+```{r}
+summary(psem_fit, standardize = "scale")$ChiSq
+summary(psem_fit, standardize = "scale")$Cstat
+```
+
+### Model coefficients
+We standardize the coefficients so that they are comparable between sub models. This tells us which paths in the SEM are statistically signficant. 
+
+```{r}
+summary(psem_fit, standardize = "scale")$coefficients
+```
+
+### Model R Squareds
+We can calculate R squareds from the individual sub models to tell us about how good each sub model is. 
+```{r}
+summary(psem_fit)$R2
+```
+
+### Sneaky SEM plot
+
+We can then use the inbuilt plot function in piecewiseSEM to visualise what we've just made. 
+
+- Dashed lines are paths that have p-values >0.05
+- Solid lines are paths that have p-values <0.05
+
+```{r}
+plot(psem_fit)
+```
+
+We can also visualise these in the classic way of looking at regression coefficients. 
+
+```{r}
+library(ggplot2)
+coefs <- coefs(psem_fit, standardize = "range")
+
+# Point and range plot of standardized coefficients and Std Error
+ggplot(coefs) +
+  geom_pointrange(aes(x = Predictor, y = Std.Estimate, 
+                      ymin = Std.Estimate-Std.Error,
+                      ymax = Std.Estimate+Std.Error)) +
+  facet_wrap(~Response) 
+```
+
+### Model Selection
+As with other regression based appraoches, we can use model selection techniques like AICc to compare between different model structures. This is particularly useful if you are uncertain about your best model structure or are testing competing hypotheses. 
+
+So, maybe we also might beleive that elevation and distance are important and want to see whether adding those to the model makes an improvement. 
+
+```{r}
+psem_fit_2 <- psem(
+  lm(rich ~ firesev + cover + age, data=keeley),
+  lm(cover ~ firesev + elev + distance, data=keeley),
+  lm(firesev ~ age + elev + distance, data=keeley),
+  data = keeley
+)
+
+# Model selection on alternative candidate models
+lapply(list(psem_fit, 
+            psem_fit_2), 
+       FUN = AIC_psem)
+```
+
+
